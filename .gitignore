@@ -1,0 +1,5 @@
+.clj-kondo/
+.lsp/
+contrib/
+pod-bogue1979-nats
+

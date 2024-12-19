@@ -1,10 +1,6 @@
 #!/usr/bin/env bb
-
 (require '[clojure.core.async :as a]
-         '[babashka.pods :as pods]
-         ;'[clojure.java.shell :refer [ sh]]
-         ;'[cheshire.core :as json :refer [parse-string]]
-         )
+         '[babashka.pods :as pods])
 (pods/load-pod "pod-bogue1979-nats")
 (require '[pod.bogue1979.nats :as nats])
 
@@ -19,13 +15,10 @@
                     (Thread. #(do
                                 (println  "SHUTDOWN")
                                 (a/close! ch))))
-  (println "Start subscriber")
+  (println "Start bucket watcher")
   (a/go (nats/kvwatchbucket (fn [msg] (a/>! ch msg)) opts)))
-
 
 (let [ch (a/chan)]
   (runsubscriber ch)
   (while true
     (prn (a/<!! ch))))
-
-

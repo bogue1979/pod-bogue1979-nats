@@ -15,15 +15,6 @@ type Message struct {
 	Var  string
 }
 
-func (m *Message) Arguments() (inputList []json.RawMessage,err error) {
-
-		if err := json.Unmarshal([]byte(m.Args), &inputList); err != nil {
-			return nil, err
-		}
-    return inputList,nil
-}
-
-// Namespace doc
 type Namespace struct {
 	Name string `bencode:"name"`
 	Vars []Var  `bencode:"vars"`
@@ -52,18 +43,50 @@ type ErrorResponse struct {
 	ExData    string   `bencode:"ex-data"`
 }
 
+func (m *Message) Arguments() (inputList []json.RawMessage, err error) {
+	if err := json.Unmarshal([]byte(m.Args), &inputList); err != nil {
+		return nil, err
+	}
+	return inputList, nil
+}
+
 func ReadMessage() (*Message, error) {
 	reader := bufio.NewReader(os.Stdin)
 	message := &Message{}
 	if err := bencode.Unmarshal(reader, &message); err != nil {
 		return nil, err
 	}
-
 	return message, nil
+}
+
+func writeResponse(response any) error {
+	writer := bufio.NewWriter(os.Stdout)
+	if err := bencode.Marshal(writer, response); err != nil {
+		return err
+	}
+	writer.Flush()
+	return nil
 }
 
 func WriteDescribeResponse(describeResponse *DescribeResponse) {
 	writeResponse(*describeResponse)
+}
+
+func WriteNotDoneInvokeResponse(inputMessage *Message, value any) error {
+	if value == nil {
+		return nil
+	}
+	resultValue, err := json.Marshal(value)
+	if err != nil {
+		return err
+	}
+	response := InvokeResponse{
+		Id:     inputMessage.Id,
+		Status: []string{},
+		Value:  string(resultValue),
+	}
+	writeResponse(response)
+	return nil
 }
 
 func WriteInvokeResponse(inputMessage *Message, value any) error {
@@ -74,24 +97,20 @@ func WriteInvokeResponse(inputMessage *Message, value any) error {
 	if err != nil {
 		return err
 	}
-	response := InvokeResponse{Id: inputMessage.Id, Status: []string{"done"}, Value: string(resultValue)}
+	response := InvokeResponse{
+		Id:     inputMessage.Id,
+		Status: []string{"done"},
+		Value:  string(resultValue),
+	}
 	writeResponse(response)
-
 	return nil
 }
 
 func WriteErrorResponse(inputMessage *Message, err error) {
-	errorResponse := ErrorResponse{Id: inputMessage.Id, Status: []string{"done", "error"}, ExMessage: err.Error()}
-	writeResponse(errorResponse)
-}
-
-func writeResponse(response any) error {
-	writer := bufio.NewWriter(os.Stdout)
-	if err := bencode.Marshal(writer, response); err != nil {
-		return err
+	errorResponse := ErrorResponse{
+		Id:        inputMessage.Id,
+		Status:    []string{"done", "error"},
+		ExMessage: err.Error(),
 	}
-
-	writer.Flush()
-
-	return nil
+	writeResponse(errorResponse)
 }

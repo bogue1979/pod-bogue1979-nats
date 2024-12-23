@@ -5,12 +5,10 @@ before:
     - go mod download
 builds:
   - id: "pod-bogue1979-nats"
-    buildmode: c-archive
     env:
       - CGO_ENABLED=0
     goos:
       - linux
-      - windows
       - darwin
 archives:
   - format: zip

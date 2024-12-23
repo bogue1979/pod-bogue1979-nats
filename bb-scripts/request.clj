@@ -5,7 +5,7 @@
 
 (def opts
   {:host "localhost"
-   :nkey (slurp "/home/danny/.config/nats/local.seed")
+   :nkey (slurp (str (System/getenv "HOME") "/.config/nats/local.seed")),
    :subject "metrics.test"
    :msg "request"
    :timeout_seconds 10})

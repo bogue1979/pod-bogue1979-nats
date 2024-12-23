@@ -5,16 +5,9 @@
 
 (def opts
   {:host "localhost"
-   :nkey (slurp "/home/danny/.config/nats/local.seed"),
+   :nkey (slurp (str (System/getenv "HOME") "/.config/nats/local.seed")),
    :msg "_"
    :bucket "first-bucket"})
 
-;;(nats/kvput {:host "localhost"
-;;             :nkey (slurp "/home/danny/.config/nats/local.seed"),
-;;             :msg "_"
-;;             :key "bat"})
-
-(prn (nats/kvput (merge opts {:key "foo" :value "what_value"})))
-(prn (nats/kvget (merge opts {:key "foo"})))
-(prn (nats/kvget (merge opts {:key "non"})))
+(prn (nats/kvput (merge opts {:key "foo" :value "bar"})))
 (prn (nats/kvget (merge opts {:key "foo"})))

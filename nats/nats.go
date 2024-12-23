@@ -8,32 +8,25 @@ import (
 )
 
 type Sub struct {
-	Subject string `json:"subject"`
-	Queue   string `json:"queue"`
+	Subject string `json:"subject,omitempty"`
+	Queue   string `json:"queue,omitempty"`
 }
 
-type BBnatsMsg struct {
-	Subject      string      `json:"subject"`
-	Reply        string      `json:"reply"`
-	Header       nats.Header `json:"header"`
-	Data         string      `json:"data"`
-	Subscription Sub         `json:"subscription"`
+type NatsMessage struct {
+	Subject      string      `json:"subject,omitempty"`
+	Reply        string      `json:"reply,omitempty"`
+	Header       nats.Header `json:"header,omitempty"`
+	Data         string      `json:"data,omitempty"`
+	Subscription Sub         `json:"subscription,omitempty"`
 }
 
 type BBResponse struct {
-	NatsMessage BBnatsMsg `json:"nats_message,omitempty"`
-	Error       *string   `json:"error,omitempty"`
+	NatsMessage `json:"nats_message,omitempty"`
+	Error       string `json:"error,omitempty"`
 }
 
-func toBBResponse(m *nats.Msg) BBResponse {
-	return BBResponse{
-		BBnatsMsg{
-			Subject:      m.Subject,
-			Reply:        m.Reply,
-			Header:       m.Header,
-			Data:         string(m.Data),
-			Subscription: Sub{m.Sub.Subject, m.Sub.Queue},
-		}, nil}
+type PubResult struct {
+	Result string `json:"result"`
 }
 
 func natsConnect(opts Opts) (nc *nats.Conn, err error) {
@@ -48,6 +41,11 @@ func natsConnect(opts Opts) (nc *nats.Conn, err error) {
 }
 
 func publish(message *babashka.Message, opts Opts) {
+	if opts.Host == "" {
+		fail(message, "please provide :host")
+		return
+	}
+
 	if opts.Subject == "" {
 		fail(message, "please provide :subject")
 		return
@@ -60,16 +58,21 @@ func publish(message *babashka.Message, opts Opts) {
 
 	nc, err := natsConnect(opts)
 	if err != nil {
-		fail(message, err.Error())
+		sendError(message, err)
 		return
 	}
 
 	err = nc.Publish(opts.Subject, []byte(opts.Msg))
 	if err != nil {
+		sendError(message, err)
+		return
+	}
+	nc.Flush()
+	if err := nc.LastError(); err != nil {
 		fail(message, err.Error())
 		return
 	}
-	babashka.WriteInvokeResponse(message, "ok")
+	babashka.WriteInvokeResponse(message, PubResult{Result: "ok"})
 }
 
 func timeoutSeconds(i int) time.Duration {
@@ -80,9 +83,24 @@ func timeoutSeconds(i int) time.Duration {
 }
 
 func request(message *babashka.Message, opts Opts) {
+	if opts.Host == "" {
+		fail(message, "please provide :host")
+		return
+	}
+
+	if opts.Subject == "" {
+		fail(message, "please provide :subject")
+		return
+	}
+
+	if opts.Msg == "" {
+		fail(message, "please provide :msg")
+		return
+	}
+
 	nc, err := natsConnect(opts)
 	if err != nil {
-		fail(message, err.Error())
+		sendError(message, err)
 		return
 	}
 	defer nc.Close()
@@ -93,10 +111,17 @@ func request(message *babashka.Message, opts Opts) {
 
 	resp, err := nc.Request(sub, msg, timeout)
 	if err != nil {
-		fail(message, err.Error())
+		sendError(message, err)
 		return
 	}
-	babashka.WriteInvokeResponse(message, toBBResponse(resp))
+	babashka.WriteInvokeResponse(message,
+		NatsMessage{
+			Subject:      resp.Subject,
+			Reply:        resp.Reply,
+			Header:       resp.Header,
+			Data:         string(resp.Data),
+			Subscription: Sub{resp.Sub.Subject, resp.Sub.Queue},
+		})
 }
 
 func subscribe(message *babashka.Message, opts Opts) {
@@ -104,17 +129,24 @@ func subscribe(message *babashka.Message, opts Opts) {
 
 	nc, err := natsConnect(opts)
 	if err != nil {
-		fail(message, err.Error())
+		sendError(message, err)
 		return
 	}
 	defer nc.Close()
 
-	nc.Subscribe(opts.Subject, func(m *nats.Msg) {
-		babashka.WriteInvokeResponse(message, toBBResponse(m))
+	nc.Subscribe(opts.Subject, func(resp *nats.Msg) {
+		babashka.WriteInvokeResponse(message,
+			NatsMessage{
+				Subject:      resp.Subject,
+				Reply:        resp.Reply,
+				Header:       resp.Header,
+				Data:         string(resp.Data),
+				Subscription: Sub{resp.Sub.Subject, resp.Sub.Queue},
+			})
 	})
 	nc.Flush()
 	if err := nc.LastError(); err != nil {
-		fail(message, err.Error())
+		sendError(message, err)
 		return
 	}
 	<-done

@@ -7,22 +7,12 @@ import (
 	"github.com/nats-io/nats.go"
 )
 
-type BBKvWatchMsg struct {
-	Bucket    string `json:"bucket"`
-	Key       string `json:"key"`
-	Value     string `json:"value"`
-	Revision  uint64 `json:"revision"`
-	Operation string `json:"operation"`
-}
-
-func parseKVentry(in nats.KeyValueEntry) BBKvWatchMsg {
-	return BBKvWatchMsg{
-		Bucket:    in.Bucket(),
-		Key:       in.Key(),
-		Value:     string(in.Value()),
-		Revision:  in.Revision(),
-		Operation: in.Operation().String(),
-	}
+type BBKvMsg struct {
+	Bucket    string `json:"bucket,omitempty"`
+	Key       string `json:"key,omitempty"`
+	Value     string `json:"value,omitempty"`
+	Revision  uint64 `json:"revision,omitempty"`
+	Operation string `json:"operation,omitempty"`
 }
 
 func kvput(message *babashka.Message, opts Opts) {
@@ -54,12 +44,12 @@ func kvput(message *babashka.Message, opts Opts) {
 		sendError(message, err)
 		return
 	}
-	_, err = bucket.Put(opts.Key, []byte(opts.Value))
+	revision, err := bucket.Put(opts.Key, []byte(opts.Value))
 	if err != nil {
 		sendError(message, err)
 		return
 	}
-	babashka.WriteInvokeResponse(message, "ok")
+	babashka.WriteInvokeResponse(message, BBKvMsg{Revision: revision})
 }
 
 func kvget(message *babashka.Message, opts Opts) {
@@ -92,10 +82,27 @@ func kvget(message *babashka.Message, opts Opts) {
 		sendError(message, err)
 		return
 	}
-	babashka.WriteInvokeResponse(message, parseKVentry(entry))
+	babashka.WriteInvokeResponse(message,
+		BBKvMsg{
+			Bucket:    entry.Bucket(),
+			Key:       entry.Key(),
+			Value:     string(entry.Value()),
+			Revision:  entry.Revision(),
+			Operation: entry.Operation().String(),
+		},
+	)
 }
 
 func kvwatchbucket(message *babashka.Message, opts Opts) {
+	if opts.Host == "" {
+		fail(message, "please provide :host")
+		return
+	}
+
+	if opts.Bucket == "" {
+		fail(message, "please provide :bucket")
+		return
+	}
 	nc, err := natsConnect(opts)
 	if err != nil {
 		sendError(message, err)
@@ -120,12 +127,20 @@ func kvwatchbucket(message *babashka.Message, opts Opts) {
 	defer watcher.Stop()
 
 	for {
-		current, ok := <-watcher.Updates()
+		entry, ok := <-watcher.Updates()
 		if !ok {
 			break
 		}
-		if current != nil {
-			babashka.WriteInvokeResponse(message, parseKVentry(current))
+		if entry != nil {
+			babashka.WriteInvokeResponse(message,
+				BBKvMsg{
+					Bucket:    entry.Bucket(),
+					Key:       entry.Key(),
+					Value:     string(entry.Value()),
+					Revision:  entry.Revision(),
+					Operation: entry.Operation().String(),
+				},
+			)
 		}
 	}
 }

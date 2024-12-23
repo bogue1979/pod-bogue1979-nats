@@ -80,12 +80,11 @@ func WriteNotDoneInvokeResponse(inputMessage *Message, value any) error {
 	if err != nil {
 		return err
 	}
-	response := InvokeResponse{
+	writeResponse(InvokeResponse{
 		Id:     inputMessage.Id,
 		Status: []string{},
 		Value:  string(resultValue),
-	}
-	writeResponse(response)
+	})
 	return nil
 }
 
@@ -97,20 +96,18 @@ func WriteInvokeResponse(inputMessage *Message, value any) error {
 	if err != nil {
 		return err
 	}
-	response := InvokeResponse{
+	writeResponse(InvokeResponse{
 		Id:     inputMessage.Id,
 		Status: []string{"done"},
 		Value:  string(resultValue),
-	}
-	writeResponse(response)
+	})
 	return nil
 }
 
 func WriteErrorResponse(inputMessage *Message, err error) {
-	errorResponse := ErrorResponse{
+	writeResponse(ErrorResponse{
 		Id:        inputMessage.Id,
 		Status:    []string{"done", "error"},
 		ExMessage: err.Error(),
-	}
-	writeResponse(errorResponse)
+	})
 }
